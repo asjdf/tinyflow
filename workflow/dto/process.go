@@ -48,7 +48,8 @@ func (d ProcessDef) Save(def *model.ProcessDefine) (*model.ProcessDefine, error)
 	return def, err
 }
 
-func (d ProcessDef) Get(id uint) (def *model.ProcessDefine, err error) {
-	err = d.db.First(def, id).Error
-	return
+func (d ProcessDef) Get(id uint) (*model.ProcessDefine, error) {
+	def := &model.ProcessDefine{}
+	err := d.db.First(def, id).Error
+	return def, err
 }
