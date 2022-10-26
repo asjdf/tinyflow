@@ -32,6 +32,6 @@ func TestService(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := service.New(dto.New(db))
-	s.StartProcessInstanceById(1, &map[string]string{"DDHolidayField-J2BWEN12__options": "年假"})
+	s.StartProcessInstanceById(1, "A公司", "1", &map[string]string{"DDHolidayField-J2BWEN12__options": "年假"})
 
 }

@@ -53,3 +53,40 @@ func (d ProcessDef) Get(id uint) (*model.ProcessDefine, error) {
 	err := d.db.First(def, id).Error
 	return def, err
 }
+
+type ProcessInstance struct {
+	db *gorm.DB
+}
+
+func NewProcessInstance(db *gorm.DB) ProcessInstance {
+	_ = db.AutoMigrate(&model.ProcessInstance{})
+	return ProcessInstance{db: db}
+}
+
+// Save 如果不传事务则直接存
+func (p ProcessInstance) Save(instance *model.ProcessInstance, tx ...*gorm.DB) error {
+	if len(tx) != 0 {
+		return tx[0].Save(instance).Error
+	}
+	return p.db.Save(instance).Error
+}
+
+func (p ProcessInstance) Get(id uint) (*model.ProcessInstance, error) {
+	ins := &model.ProcessInstance{}
+	err := p.db.First(ins, id).Error
+	return ins, err
+}
+
+func (p ProcessInstance) Update(instance *model.ProcessInstance, tx ...*gorm.DB) error {
+	if len(tx) != 0 {
+		return tx[0].Model(instance).Updates(instance).Error
+	}
+	return p.db.Model(instance).Updates(instance).Error
+}
+
+func (p ProcessInstance) Del(instance *model.ProcessInstance, tx ...*gorm.DB) error {
+	if len(tx) != 0 {
+		return tx[0].Where(instance).Delete(&model.ProcessInstance{}).Error
+	}
+	return p.db.Where(instance).Delete(&model.ProcessInstance{}).Error
+}

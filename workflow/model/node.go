@@ -36,12 +36,11 @@ var ActionRuleTypes = [...]string{MANAGER: "target_management", LABEL: "target_l
 type NodeType int
 
 const (
-	// START 类型start
-	START NodeType = iota
-	ROUTE
-	CONDITION
-	APPROVER
-	NOTIFIER
+	START     NodeType = iota // 开始节点
+	ROUTE                     // 路径节点
+	CONDITION                 // 条件节点
+	APPROVER                  // 审批节点
+	NOTIFIER                  // 消息节点
 )
 
 var NodeTypes = [...]string{START: "start", ROUTE: "route", CONDITION: "condition", APPROVER: "approver", NOTIFIER: "notifier"}
@@ -124,11 +123,23 @@ type NodeUser struct {
 type NodeInfo struct {
 	NodeID      string `json:"nodeId"`
 	Type        string `json:"type"`
-	Aprover     string `json:"approver"`
+	Aprover     string `json:"approver"` // todo：不确定 是否需要这样写?
 	AproverType string `json:"aproverType"`
 	MemberCount int8   `json:"memberCount"`
 	Level       int8   `json:"level"`
 	ActType     string `json:"actType"`
+}
+
+func (n *NodeInfo) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
+	}
+	err := json.Unmarshal(bytes, n)
+	return err
+}
+func (n *NodeInfo) Value() (driver.Value, error) {
+	return json.Marshal(n)
 }
 
 type ProcessInputVariable *map[string]string
