@@ -9,7 +9,6 @@ type DTO struct {
 	ProcessDef      ProcessDef
 	ProcessInstance ProcessInstance
 	Task            Task
-	Execution       Execution
 	IdentityLink    IdentityLink
 }
 
@@ -18,7 +17,6 @@ func New(db *gorm.DB) DTO {
 		ProcessDef:      NewProcessDef(db),
 		ProcessInstance: NewProcessInstance(db),
 		Task:            NewTask(db),
-		Execution:       NewExecution(db),
 		IdentityLink:    NewIdentityLink(db),
 	}
 }

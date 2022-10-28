@@ -26,12 +26,19 @@ func TestDto(t *testing.T) {
 	fmt.Println(save)
 }
 
-func TestService(t *testing.T) {
+func TestStartProcess(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("sqlite.db"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := service.New(dto.New(db))
 	s.StartProcessInstanceById(1, "1", &map[string]string{"DDHolidayField-J2BWEN12__options": "年假", "DDHolidayField-J2BWEN12__duration": "8"})
+}
 
+func TestApproveProcess(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("sqlite.db"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = service.New(dto.New(db))
 }

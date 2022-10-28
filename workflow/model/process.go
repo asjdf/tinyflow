@@ -1,6 +1,7 @@
 package model
 
 import (
+	"gorm.io/datatypes"
 	"gorm.io/plugin/optimisticlock"
 	"time"
 )
@@ -38,7 +39,7 @@ type ProcessInstance struct {
 	// 当前节点
 	NodeID string `json:"nodeID"`
 	// 审批人
-	Candidate string `json:"candidate"` // 暂时没用上
+	Candidate string `json:"candidate"`
 	// 当前任务
 	TaskID      uint          `json:"taskID"`
 	StartTime   time.Time     `json:"startTime"`
@@ -46,4 +47,6 @@ type ProcessInstance struct {
 	Duration    time.Duration `json:"duration"`
 	StartUserID string        `json:"startUserId"`
 	IsFinished  bool          `gorm:"default:false" json:"isFinished"`
+	// 执行流
+	NodeInfos datatypes.JSON `json:"nodeInfos"` // []NodeInfo
 }

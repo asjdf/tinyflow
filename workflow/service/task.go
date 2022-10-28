@@ -11,8 +11,9 @@ import (
 
 // 流程流转 向前向后
 
-func (s *Service) MoveStage(exec *model.Execution, comment string, taskID uint, step int, pass bool, tx *gorm.DB) (err error) {
-	procIns, err := s.dto.ProcessInstance.Get(exec.ProcInstID, tx) // 真的可以考虑合并实例和执行流
+// MoveStage todo: 可以考虑隐函数
+func (s *Service) MoveStage(instanceId uint, comment string, taskID uint, step int, pass bool, tx *gorm.DB) (err error) {
+	procIns, err := s.dto.ProcessInstance.Get(instanceId, tx) // 真的可以考虑合并实例和执行流
 	if err != nil {
 		return err
 	}
@@ -20,7 +21,7 @@ func (s *Service) MoveStage(exec *model.Execution, comment string, taskID uint, 
 	userID := procIns.StartUserID
 	nameSpace := procIns.NameSpace
 	nodeInfos := make([]model.NodeInfo, 0)
-	_ = json.Unmarshal(exec.NodeInfos, &nodeInfos)
+	_ = json.Unmarshal(procIns.NodeInfos, &nodeInfos)
 
 	// 添加上一步的参与人
 	if err := s.dto.IdentityLink.Save(&model.IdentityLink{
@@ -70,7 +71,7 @@ func (s *Service) MoveStage(exec *model.Execution, comment string, taskID uint, 
 		}, tx); err != nil {
 			return err
 		}
-		return s.MoveStage(exec, comment, taskID, step, pass, tx)
+		return s.MoveStage(instanceId, comment, taskID, step, pass, tx) //todo: 这里应该可以优化 不然查太多次了
 	}
 	if pass {
 		return s.MoveToNextStage(nodeInfos, nameSpace, procInstID, step, tx)

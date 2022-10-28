@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 	"tinyflow/utils"
 	"tinyflow/workflow/model"
@@ -16,7 +15,6 @@ func (s *Service) StartProcessInstanceById(processId uint, userId string, input 
 	if err != nil {
 		return err
 	}
-	fmt.Println(processDef)
 
 	tx := s.dto.Begin()
 	// 创建流程实例
@@ -27,27 +25,6 @@ func (s *Service) StartProcessInstanceById(processId uint, userId string, input 
 		NameSpace:   processDef.NameSpace,
 		StartTime:   time.Now(),
 		StartUserID: userId,
-	}
-	if err := s.dto.ProcessInstance.Save(processInstance, tx); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	exec := &model.Execution{
-		ProcDefID:  processDef.ID,
-		ProcInstID: processInstance.ID,
-	}
-	task := &model.Task{
-		NodeID:        "开始",
-		ProcInstID:    processInstance.ID,
-		Assignee:      userId,
-		IsFinished:    true,
-		ClaimTime:     time.Now(),
-		Step:          0, // 开始
-		MemberCount:   1, // 直接过
-		UnCompleteNum: 0,
-		ActType:       "or",
-		AgreeNum:      1,
 	}
 
 	ExecFlow, err := processDef.Nodes.GenExecFlow(input)
@@ -64,11 +41,24 @@ func (s *Service) StartProcessInstanceById(processId uint, userId string, input 
 	// 下面是一坨屎 有空来处理
 	execFlows := make([]model.NodeInfo, 0, ExecFlow.Len())
 	utils.List2Array(ExecFlow, &execFlows)
-	exec.NodeInfos, err = json.Marshal(execFlows)
+	processInstance.NodeInfos, _ = json.Marshal(execFlows)
 
-	if err := s.dto.Execution.Save(exec, tx); err != nil {
+	if err := s.dto.ProcessInstance.Save(processInstance, tx); err != nil {
 		tx.Rollback()
 		return err
+	}
+
+	task := &model.Task{
+		NodeID:        "开始",
+		ProcInstID:    processInstance.ID,
+		Assignee:      userId,
+		IsFinished:    true,
+		ClaimTime:     time.Now(),
+		Step:          0, // 开始
+		MemberCount:   1, // 直接过
+		UnCompleteNum: 0,
+		ActType:       "or",
+		AgreeNum:      1,
 	}
 
 	if execFlows[0].ActType == "and" {
@@ -82,7 +72,7 @@ func (s *Service) StartProcessInstanceById(processId uint, userId string, input 
 
 	//开始工作流流转
 	//这里还没写好
-	if err := s.MoveStage(exec, "启动流程", task.ID, 0, true, tx); err != nil {
+	if err := s.MoveStage(processInstance.ID, "启动流程", task.ID, 0, true, tx); err != nil {
 		tx.Rollback()
 		return err
 	}
