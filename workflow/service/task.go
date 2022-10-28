@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"gorm.io/gorm"
 	"time"
@@ -11,14 +12,15 @@ import (
 // 流程流转 向前向后
 
 func (s *Service) MoveStage(exec *model.Execution, comment string, taskID uint, step int, pass bool, tx *gorm.DB) (err error) {
-	procIns, err := s.dto.ProcessInstance.Get(exec.ProcInstID) // 真的可以考虑合并实例和执行流
+	procIns, err := s.dto.ProcessInstance.Get(exec.ProcInstID, tx) // 真的可以考虑合并实例和执行流
 	if err != nil {
 		return err
 	}
 	procInstID := procIns.ID
 	userID := procIns.StartUserID
 	nameSpace := procIns.NameSpace
-	nodeInfos := exec.NodeInfos
+	nodeInfos := make([]model.NodeInfo, 0)
+	_ = json.Unmarshal(exec.NodeInfos, &nodeInfos)
 
 	// 添加上一步的参与人
 	if err := s.dto.IdentityLink.Save(&model.IdentityLink{
@@ -119,7 +121,7 @@ func (s *Service) MoveToNextStage(nodeInfos []model.NodeInfo, nameSpace string, 
 				ProcInstID: procInstID,
 				Type:       identityType.ToStr[identityType.CANDIDATE],
 			},
-		); err != nil {
+			tx); err != nil {
 			return err
 		}
 		// 更新流程实例

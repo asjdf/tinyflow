@@ -71,8 +71,12 @@ func (p ProcessInstance) Save(instance *model.ProcessInstance, tx ...*gorm.DB) e
 	return p.db.Save(instance).Error
 }
 
-func (p ProcessInstance) Get(id uint) (*model.ProcessInstance, error) {
+func (p ProcessInstance) Get(id uint, tx ...*gorm.DB) (*model.ProcessInstance, error) {
 	ins := &model.ProcessInstance{}
+	if len(tx) != 0 {
+		err := tx[0].First(ins, id).Error
+		return ins, err
+	}
 	err := p.db.First(ins, id).Error
 	return ins, err
 }

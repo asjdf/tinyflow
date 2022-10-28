@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 	"tinyflow/utils"
@@ -9,7 +10,7 @@ import (
 
 // 流程实例管理
 
-func (s *Service) StartProcessInstanceById(processId uint, nameSpace string, userId string, input model.ProcessInputVariable) error {
+func (s *Service) StartProcessInstanceById(processId uint, userId string, input model.ProcessInputVariable) error {
 	// 获取流程信息
 	processDef, err := s.dto.ProcessDef.Get(processId)
 	if err != nil {
@@ -59,15 +60,20 @@ func (s *Service) StartProcessInstanceById(processId uint, nameSpace string, use
 		Aprover: userId,
 	})
 	ExecFlow.PushBack(model.NodeInfo{NodeID: "结束"})
-	exec.NodeInfos = interface{}(utils.List2Array(ExecFlow)).([]model.NodeInfo)
+
+	// 下面是一坨屎 有空来处理
+	execFlows := make([]model.NodeInfo, 0, ExecFlow.Len())
+	utils.List2Array(ExecFlow, &execFlows)
+	exec.NodeInfos, err = json.Marshal(execFlows)
+
 	if err := s.dto.Execution.Save(exec, tx); err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	if exec.NodeInfos[0].ActType == "and" {
-		task.UnCompleteNum = exec.NodeInfos[0].MemberCount
-		task.MemberCount = exec.NodeInfos[0].MemberCount
+	if execFlows[0].ActType == "and" {
+		task.UnCompleteNum = execFlows[0].MemberCount
+		task.MemberCount = execFlows[0].MemberCount
 	}
 	if err := s.dto.Task.Save(task, tx); err != nil {
 		tx.Rollback()

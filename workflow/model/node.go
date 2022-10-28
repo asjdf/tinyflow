@@ -54,6 +54,7 @@ type Node struct {
 	ChildNode      *Node           `json:"childNode,omitempty"`
 	ConditionNodes []*Node         `json:"conditionNodes,omitempty"`
 	Properties     *NodeProperties `json:"properties,omitempty"`
+	//datatypes.JSON
 }
 
 func (n *Node) Scan(value interface{}) error {
@@ -231,7 +232,6 @@ func parseProcessConfig(node *Node, variable ProcessInputVariable, list *list.Li
 			MemberCount: node.Properties.ActionerRules[0].MemberCount,
 			ActType:     node.Properties.ActionerRules[0].ActType,
 		})
-		break
 	default:
 	}
 
@@ -258,7 +258,6 @@ func parseProcessConfig(node *Node, variable ProcessInputVariable, list *list.Li
 			if err != nil {
 				return err
 			}
-
 		}
 	}
 	// 存在子节点
