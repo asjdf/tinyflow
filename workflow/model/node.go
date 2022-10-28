@@ -1,7 +1,6 @@
 package model
 
 import (
-	"container/list"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -209,13 +208,13 @@ func CheckConditionNode(nodes []*Node) error {
 }
 
 // GenExecFlow 根据传入的变量提前规划执行流
-func (n *Node) GenExecFlow(variable ProcessInputVariable) (*list.List, error) {
-	l := list.New()
-	err := parseProcessConfig(n, variable, l)
-	return l, err
+func (n *Node) GenExecFlow(variable ProcessInputVariable) (flow *[]NodeInfo, err error) {
+	flow = new([]NodeInfo)
+	err = parseProcessConfig(n, variable, flow)
+	return
 }
 
-func parseProcessConfig(node *Node, variable ProcessInputVariable, list *list.List) (err error) {
+func parseProcessConfig(node *Node, variable ProcessInputVariable, flow *[]NodeInfo) (err error) {
 	switch node.Type {
 	case NodeTypes[APPROVER], NodeTypes[NOTIFIER]:
 		var aprover string
@@ -224,7 +223,7 @@ func parseProcessConfig(node *Node, variable ProcessInputVariable, list *list.Li
 		} else {
 			aprover = node.Properties.ActionerRules[0].LabelNames
 		}
-		list.PushBack(NodeInfo{
+		*flow = append(*flow, NodeInfo{
 			NodeID:      node.NodeID,
 			Type:        node.Properties.ActionerRules[0].Type,
 			Aprover:     aprover,
@@ -239,7 +238,7 @@ func parseProcessConfig(node *Node, variable ProcessInputVariable, list *list.Li
 	if node.ConditionNodes != nil {
 		// 如果条件节点只有一个或者条件只有一个，直接返回第一个
 		if variable == nil || len(node.ConditionNodes) == 1 {
-			err = parseProcessConfig(node.ConditionNodes[0].ChildNode, variable, list)
+			err = parseProcessConfig(node.ConditionNodes[0].ChildNode, variable, flow)
 			if err != nil {
 				return err
 			}
@@ -252,9 +251,8 @@ func parseProcessConfig(node *Node, variable ProcessInputVariable, list *list.Li
 			if condNode == nil {
 				str, _ := utils.ToJSONStr(variable)
 				return errors.New("节点【" + node.NodeID + "】找不到符合条件的子节点,检查变量【var】值是否匹配," + str)
-				// panic(err)
 			}
-			err = parseProcessConfig(condNode, variable, list)
+			err = parseProcessConfig(condNode, variable, flow)
 			if err != nil {
 				return err
 			}
@@ -262,7 +260,7 @@ func parseProcessConfig(node *Node, variable ProcessInputVariable, list *list.Li
 	}
 	// 存在子节点
 	if node.ChildNode != nil {
-		err = parseProcessConfig(node.ChildNode, variable, list)
+		err = parseProcessConfig(node.ChildNode, variable, flow)
 		if err != nil {
 			return err
 		}
@@ -366,7 +364,6 @@ func checkConditions(cond *NodeCondition, value string) (bool, error) {
 				return true, nil
 			}
 		}
-		// log.Printf("key:" + cond.ParamKey + "找不到对应的值")
 		return false, nil
 	default:
 		str, _ := utils.ToJSONStr(ActionConditionTypes)
