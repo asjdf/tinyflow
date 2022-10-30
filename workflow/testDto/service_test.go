@@ -35,13 +35,26 @@ func TestStartProcess(t *testing.T) {
 	s.StartProcessInstanceById(1, "1", &map[string]string{"DDHolidayField-J2BWEN12__options": "年假", "DDHolidayField-J2BWEN12__duration": "8"})
 }
 
-func TestApproveProcess(t *testing.T) {
+func TestPassTask(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("sqlite.db"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := service.New(dto.New(db))
-	err = s.PassTask(2, "abc", "A公司", "通过你的申请", true)
+	err = s.PassTask(2, "abc", "A公司", "通过你的申请", "", true)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func TestWithdrawTask(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("sqlite.db"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := service.New(dto.New(db))
+	err = s.WithdrawTask(2, "abc", "A公司", "驳回你的申请")
 	if err != nil {
 		return
 	}

@@ -70,7 +70,7 @@ func (s *Service) StartProcessInstanceById(processId uint, userId string, input 
 	//开始工作流流转
 	//这里还没写好
 	// 把启动的那个节点通过一下 顺便就把流程带起来了
-	if err := s.MoveStage(processInstance.ID, userId, "启动流程", task.ID, 0, true, tx); err != nil {
+	if err := s.MoveStage(processInstance.ID, userId, "启动流程", "", task.ID, 0, true, tx); err != nil {
 		tx.Rollback()
 		return err
 	}

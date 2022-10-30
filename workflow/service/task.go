@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
+	"math"
+	"sort"
 	"time"
 	"tinyflow/workflow/model"
 	"tinyflow/workflow/model/identityType"
@@ -13,7 +15,7 @@ import (
 // 流程流转 向前向后
 
 // PassTask 通过审批
-func (s *Service) PassTask(taskID uint, userID string, nameSpace string, comment string, pass bool) error {
+func (s *Service) PassTask(taskID uint, userID, nameSpace, comment, candidate string, pass bool) error {
 	tx := s.dto.Begin()
 	//更新任务
 	task, err := s.updateTaskWhenComplete(taskID, userID, pass, tx)
@@ -45,7 +47,69 @@ func (s *Service) PassTask(taskID uint, userID string, nameSpace string, comment
 		return nil
 	}
 	// 流转到下一流程
-	err = s.MoveStage(task.ProcInstID, userID, comment, task.ID, task.Step, pass, tx)
+	err = s.MoveStage(task.ProcInstID, userID, comment, candidate, task.ID, task.Step, pass, tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+// WithdrawTask 撤回审批 todo: 上锁 另外检查流程有没有问题
+func (s *Service) WithdrawTask(taskID uint, userID string, nameSpace string, comment string) error {
+	currentTask, err := s.dto.Task.Get(taskID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return errors.New("审批任务不存在")
+		}
+		return err
+	}
+	if currentTask.Step == 0 {
+		return errors.New("开始位置无法撤回")
+	}
+
+	// 找前一审批任务
+	passedTasks, err := s.dto.Task.Find(&model.Task{ProcInstID: currentTask.ProcInstID, IsFinished: true})
+	if err != nil {
+		return err
+	} else if len(passedTasks) == 0 {
+		return errors.New("找不到前一审批节点，撤回失败")
+	}
+
+	sort.Slice(passedTasks, func(i, j int) bool {
+		return passedTasks[i].ClaimTime.After(passedTasks[j].ClaimTime)
+	})
+
+	latestPassedTask := passedTasks[0]
+	if latestPassedTask.Assignee != userID {
+		return errors.New("只能撤回本人审批过的任务")
+	}
+	if currentTask.IsFinished {
+		return errors.New("已经审批结束已无法撤回")
+	}
+	if currentTask.UnCompleteNum != currentTask.MemberCount {
+		return errors.New("已经有其他人审批过无法撤回")
+	}
+	sub := currentTask.Step - latestPassedTask.Step
+	if math.Abs(float64(sub)) != 1 {
+		return errors.New("只能撤回相邻的任务")
+	}
+	var pass = false
+	if sub < 0 {
+		pass = true
+	}
+	tx := s.dto.Begin()
+	// 更新当前的任务
+	currentTask.IsFinished = true
+
+	err = s.dto.Task.Update(currentTask, tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	// 撤回
+	err = s.MoveStage(currentTask.ProcInstID, userID, comment, "", taskID, currentTask.Step, pass, tx)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -103,7 +167,8 @@ func (s *Service) ifParticipantTask(taskID uint, userID string) (bool, error) {
 }
 
 // MoveStage 负责流程流转
-func (s *Service) MoveStage(instanceId uint, userID, comment string, taskID uint, step int, pass bool, tx *gorm.DB) (err error) {
+// candidate 可为空 是为了指定下一步审批人 可为空 还没做好其他东西
+func (s *Service) MoveStage(instanceId uint, userID, comment, candidate string, taskID uint, step int, pass bool, tx *gorm.DB) (err error) {
 	procIns, err := s.dto.ProcessInstance.Get(instanceId, tx) // 真的可以考虑合并实例和执行流
 	if err != nil {
 		return err
@@ -138,6 +203,9 @@ func (s *Service) MoveStage(instanceId uint, userID, comment string, taskID uint
 		}
 	}
 
+	if candidate != "" {
+		nodeInfos[step].Aprover = candidate
+	}
 	// 判断下一流程： 如果是审批人是：抄送人
 	// fmt.Printf("下一审批人类型：%s\n", nodeInfos[step].AproverType)
 	if nodeInfos[step].AproverType == model.NodeTypes[model.NOTIFIER] {
@@ -162,7 +230,7 @@ func (s *Service) MoveStage(instanceId uint, userID, comment string, taskID uint
 		}, tx); err != nil {
 			return err
 		}
-		return s.MoveStage(instanceId, userID, comment, taskID, step, pass, tx) //todo: 这里应该可以优化 不然查太多次了
+		return s.MoveStage(instanceId, userID, comment, candidate, taskID, step, pass, tx) //todo: 这里应该可以优化 不然查太多次了
 	}
 	if pass {
 		return s.MoveToNextStage(nodeInfos, nameSpace, procInstID, step, tx)
