@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"gorm.io/plugin/optimisticlock"
+	"time"
+)
 
 // Task 单个审批节点产生的任务
 type Task struct {
@@ -10,7 +13,7 @@ type Task struct {
 	Step   int    `json:"step"`
 	// 流程实例id
 	ProcInstID uint `json:"procInstID"`
-	// Assignee 节点归属人 可考虑去除 根据ProcInst信息获取
+	// Assignee 节点审批人
 	Assignee  string    `json:"assignee"`
 	ClaimTime time.Time `json:"claimTime"`
 	// 还未审批的用户数，等于0代表会签已经全部审批结束，默认值为1
@@ -21,4 +24,6 @@ type Task struct {
 	// and 为会签，or为或签，默认为or
 	ActType    string `json:"actType" gorm:"default:'or'"`
 	IsFinished bool   `gorm:"default:false" json:"isFinished"`
+
+	Version optimisticlock.Version // 暂时乐观锁吧
 }

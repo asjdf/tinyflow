@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"gorm.io/gorm"
 	"time"
 	"tinyflow/workflow/model"
@@ -11,19 +12,108 @@ import (
 
 // 流程流转 向前向后
 
-// MoveStage todo: 可以考虑隐函数
-func (s *Service) MoveStage(instanceId uint, comment string, taskID uint, step int, pass bool, tx *gorm.DB) (err error) {
+// PassTask 通过审批
+func (s *Service) PassTask(taskID uint, userID string, nameSpace string, comment string, pass bool) error {
+	tx := s.dto.Begin()
+	//更新任务
+	task, err := s.updateTaskWhenComplete(taskID, userID, pass, tx)
+	if err != nil {
+		return err
+	}
+	// 如果是会签
+	if task.ActType == "and" {
+		// 判断用户是否已参与过审批（存在会签的情况）
+		yes, err := s.ifParticipantTask(taskID, userID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		if yes {
+			tx.Rollback()
+			return errors.New("已审批过")
+		}
+	}
+
+	// 查看任务的未审批人数是否为0，不为0就不流转
+	if task.UnCompleteNum > 0 && pass == true { // 默认是全部通过
+		// 添加参与人
+		err := s.AddParticipantTx(userID, nameSpace, comment, task.ID, task.ProcInstID, task.Step, tx)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		return nil
+	}
+	// 流转到下一流程
+	err = s.MoveStage(task.ProcInstID, userID, comment, task.ID, task.Step, pass, tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+func (s *Service) updateTaskWhenComplete(taskID uint, userID string, pass bool, tx *gorm.DB) (*model.Task, error) {
+	// 查询任务
+	task, err := s.dto.Task.Get(taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, errors.New("任务【" + fmt.Sprintf("%d", task.ID) + "】不存在")
+	}
+	// 判断是否已经结束
+	if task.IsFinished == true {
+		if task.NodeID == "结束" {
+			return nil, errors.New("流程已经结束")
+		}
+		return nil, errors.New("任务【" + fmt.Sprintf("%d", taskID) + "】已经被审批过了！！")
+	}
+	// 设置处理人和处理时间
+	task.Assignee = userID
+	task.ClaimTime = time.Now()
+
+	// 会签 （默认全部通过才结束），只要存在一个不通过，就结束，然后流转到上一步
+	if pass {
+		task.AgreeNum++
+	} else {
+		task.IsFinished = true
+	}
+	// 未审批人数减一
+	task.UnCompleteNum--
+	// 判断是否结束
+	if task.UnCompleteNum == 0 {
+		task.IsFinished = true
+	}
+	err = s.dto.Task.Update(task, tx)
+	if err != nil {
+		return nil, err
+	}
+	return task, nil
+}
+
+// ifParticipantTask 检查是否已参与单个节点审批
+func (s *Service) ifParticipantTask(taskID uint, userID string) (bool, error) {
+	list, err := s.dto.IdentityLink.Find(&model.IdentityLink{TaskID: taskID, UserID: userID})
+	if err != nil {
+		return false, err
+	}
+	return len(list) != 0, err
+}
+
+// MoveStage 负责流程流转
+func (s *Service) MoveStage(instanceId uint, userID, comment string, taskID uint, step int, pass bool, tx *gorm.DB) (err error) {
 	procIns, err := s.dto.ProcessInstance.Get(instanceId, tx) // 真的可以考虑合并实例和执行流
 	if err != nil {
 		return err
 	}
 	procInstID := procIns.ID
-	userID := procIns.StartUserID
 	nameSpace := procIns.NameSpace
 	nodeInfos := make([]model.NodeInfo, 0)
 	_ = json.Unmarshal(procIns.NodeInfos, &nodeInfos)
 
-	// 添加上一步的参与人
+	// 添加上一步的参与人 也就是当前审批的这一步
 	if err := s.dto.IdentityLink.Save(&model.IdentityLink{
 		Type:       identityType.ToStr[identityType.PARTICIPANT],
 		UserID:     userID,
@@ -35,6 +125,7 @@ func (s *Service) MoveStage(instanceId uint, comment string, taskID uint, step i
 	}, tx); err != nil {
 		return err
 	}
+
 	if pass {
 		step++
 		if step-1 > len(nodeInfos) {
@@ -71,7 +162,7 @@ func (s *Service) MoveStage(instanceId uint, comment string, taskID uint, step i
 		}, tx); err != nil {
 			return err
 		}
-		return s.MoveStage(instanceId, comment, taskID, step, pass, tx) //todo: 这里应该可以优化 不然查太多次了
+		return s.MoveStage(instanceId, userID, comment, taskID, step, pass, tx) //todo: 这里应该可以优化 不然查太多次了
 	}
 	if pass {
 		return s.MoveToNextStage(nodeInfos, nameSpace, procInstID, step, tx)
@@ -170,44 +261,4 @@ func (s *Service) MoveToPrevStage(nodeInfos []model.NodeInfo, nameSpace string, 
 		return err
 	}
 	return nil
-}
-
-// AddCandidateUserTx 添加候选用户 两个差别不大 看看能不能合并
-func (s *Service) AddCandidateUserTx(userID, nameSpace string, step int, taskID, procInstID uint, tx *gorm.DB) error {
-	if err := s.dto.IdentityLink.Del(
-		&model.IdentityLink{
-			ProcInstID: procInstID,
-			Type:       identityType.ToStr[identityType.CANDIDATE],
-		}, tx); err != nil {
-		return err
-	}
-	i := &model.IdentityLink{
-		UserID:     userID,
-		Type:       identityType.ToStr[identityType.CANDIDATE],
-		TaskID:     taskID,
-		Step:       step,
-		ProcInstID: procInstID,
-		NameSpace:  nameSpace,
-	}
-	return s.dto.IdentityLink.Save(i, tx)
-}
-
-// AddCandidateGroupTx 添加候选用户组
-func (s *Service) AddCandidateGroupTx(group, nameSpace string, step int, taskID, procInstID uint, tx *gorm.DB) error {
-	if err := s.dto.IdentityLink.Del(
-		&model.IdentityLink{
-			ProcInstID: procInstID,
-			Type:       identityType.ToStr[identityType.CANDIDATE],
-		}, tx); err != nil {
-		return err
-	}
-	i := &model.IdentityLink{
-		Group:      group,
-		Type:       identityType.ToStr[identityType.CANDIDATE],
-		TaskID:     taskID,
-		Step:       step,
-		ProcInstID: procInstID,
-		NameSpace:  nameSpace,
-	}
-	return s.dto.IdentityLink.Save(i, tx)
 }

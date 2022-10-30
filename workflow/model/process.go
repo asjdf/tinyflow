@@ -49,4 +49,6 @@ type ProcessInstance struct {
 	IsFinished  bool          `gorm:"default:false" json:"isFinished"`
 	// 执行流
 	NodeInfos datatypes.JSON `json:"nodeInfos"` // []NodeInfo
+
+	Version optimisticlock.Version // 暂时乐观锁吧
 }

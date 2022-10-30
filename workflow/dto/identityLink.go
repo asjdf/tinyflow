@@ -22,6 +22,12 @@ func (i IdentityLink) Save(data *model.IdentityLink, tx ...*gorm.DB) error {
 	return i.db.Save(data).Error
 }
 
+func (p IdentityLink) Find(where *model.IdentityLink) ([]*model.IdentityLink, error) {
+	list := make([]*model.IdentityLink, 0, 10)
+	err := p.db.Where(where).Find(&list).Error
+	return list, err
+}
+
 func (i IdentityLink) Del(data *model.IdentityLink, tx ...*gorm.DB) error {
 	if len(tx) != 0 {
 		return tx[0].Where(data).Delete(&model.IdentityLink{}).Error

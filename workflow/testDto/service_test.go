@@ -11,7 +11,7 @@ import (
 	"tinyflow/workflow/service"
 )
 
-func TestDto(t *testing.T) {
+func TestDTOAndParseProcessDef(t *testing.T) {
 	def := model.ProcessDefine{}
 	err := json.Unmarshal([]byte(postData), &def)
 	db, err := gorm.Open(sqlite.Open("sqlite.db"), &gorm.Config{})
@@ -40,5 +40,10 @@ func TestApproveProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = service.New(dto.New(db))
+	s := service.New(dto.New(db))
+	err = s.PassTask(2, "abc", "A公司", "通过你的申请", true)
+	if err != nil {
+		return
+	}
+	return
 }

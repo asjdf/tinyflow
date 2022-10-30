@@ -81,6 +81,12 @@ func (p ProcessInstance) Get(id uint, tx ...*gorm.DB) (*model.ProcessInstance, e
 	return ins, err
 }
 
+func (p ProcessInstance) Find(where *model.ProcessInstance) ([]*model.ProcessInstance, error) {
+	list := make([]*model.ProcessInstance, 0, 10)
+	err := p.db.Where(where).Find(&list).Error
+	return list, err
+}
+
 func (p ProcessInstance) Update(instance *model.ProcessInstance, tx ...*gorm.DB) error {
 	if len(tx) != 0 {
 		return tx[0].Model(instance).Updates(instance).Error
