@@ -88,10 +88,18 @@ func (p ProcessInstance) Find(where *model.ProcessInstance) ([]*model.ProcessIns
 }
 
 func (p ProcessInstance) Update(instance *model.ProcessInstance, tx ...*gorm.DB) error {
+	var result *gorm.DB
 	if len(tx) != 0 {
-		return tx[0].Model(instance).Updates(instance).Error
+		result = tx[0].Model(instance).Updates(instance)
+	} else {
+		result = p.db.Model(instance).Updates(instance)
 	}
-	return p.db.Model(instance).Updates(instance).Error
+	if result.Error != nil {
+		return result.Error
+	} else if result.RowsAffected != 1 {
+		return errors.New("update locked by optimistic lock")
+	}
+	return nil
 }
 
 func (p ProcessInstance) Del(instance *model.ProcessInstance, tx ...*gorm.DB) error {
